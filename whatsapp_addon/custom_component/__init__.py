@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from .whatsapp import Whatsapp
+from .whatsapp import Whatsapp, UNREACHABLE
 
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers.typing import ConfigType
@@ -15,7 +15,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     @callback
     async def send_message(call: ServiceCall) -> None:
-        await hass.async_add_executor_job(whatsapp.send_message, call.data)
+        result = await hass.async_add_executor_job(whatsapp.send_message, call.data)
+        if result == UNREACHABLE:
+            # The app could not fire its own failure event, so fire it here
+            # so the resend automation still picks the message up.
+            hass.bus.async_fire('whatsapp_send_failed', {
+                **call.data,
+                'retry': bool(call.data.get('retry', False)),
+                'reason': 'AppUnreachable',
+                'error': 'WhatsApp app did not answer',
+            })
 
     @callback
     async def set_status(call: ServiceCall) -> None:

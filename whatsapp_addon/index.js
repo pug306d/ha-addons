@@ -19,6 +19,54 @@ app.use(bodyParser.json());
 
 const clients = {};
 
+// ---- Self-heal (Lodge patch) ---------------------------------------------
+// The WhatsApp connection can drop while this process keeps running, so the
+// Supervisor watchdog never notices and every send fails quietly. When that
+// happens we tell Home Assistant (events) and exit, so the watchdog restarts
+// the app (~3 s) with a fresh connection.
+
+const DOWN_LIMIT_MS = 5 * 60 * 1000; // restart if down this long
+const HEALTH_CHECK_MS = 60 * 1000;
+// 401 disconnected/logged out, 408 lost/timed out, 428 closed,
+// 440 replaced, 500 bad session, 503 unavailable, 515 restart required
+const CONNECTION_CODES = [401, 408, 428, 440, 500, 503, 515];
+
+const fireEvent = async (type, data) => {
+  try {
+    await axios.post(`http://supervisor/core/api/events/${type}`, data, {
+      headers: { Authorization: `Bearer ${process.env.SUPERVISOR_TOKEN}` },
+    });
+  } catch (err) {
+    logger.error(`Could not fire ${type} event: ${err.message}`);
+  }
+};
+
+let restarting = false;
+const exitForRestart = async (reason) => {
+  if (restarting) return;
+  restarting = true;
+  logger.error(`Self-heal: ${reason}. Exiting so the watchdog restarts the app.`);
+  await fireEvent("whatsapp_client_restarting", { reason });
+  setTimeout(() => process.exit(1), 1500);
+};
+
+const isConnectionError = (error) =>
+  error?.name === "WhatsappDisconnectedError" ||
+  CONNECTION_CODES.includes(Number(error?.code)) ||
+  CONNECTION_CODES.includes(Number(error?.output?.statusCode));
+
+setInterval(() => {
+  for (const [key, client] of Object.entries(clients)) {
+    const h = client.health;
+    if (!h.connected && !h.awaitingQr && h.downForMs > DOWN_LIMIT_MS) {
+      exitForRestart(
+        `${key} has been disconnected for ${Math.round(h.downForMs / 60000)} min`
+      );
+    }
+  }
+}, HEALTH_CHECK_MS);
+// ---------------------------------------------------------------------------
+
 const onReady = (key) => {
   logger.info(key, "client is ready.");
   axios.post(
@@ -99,6 +147,15 @@ const init = (key) => {
   clients[key].on("restart", () => logger.debug(`${key} client restarting...`));
   clients[key].on("qr", (qr) => onQr(qr, key));
   clients[key].once("ready", () => onReady(key));
+  clients[key].on("ready", () =>
+    fireEvent("whatsapp_client_ready", { clientId: key })
+  );
+  clients[key].on("disconnected", (code) =>
+    logger.warn(`${key} disconnected (code ${code}), reconnecting...`)
+  );
+  clients[key].on("connect_error", (err) =>
+    logger.error(`${key} failed to connect: ${err?.message || err}`)
+  );
   clients[key].on("msg", (msg) => onMsg(msg, key));
   clients[key].on("logout", () => onLogout(key));
   clients[key].on("presence_update", (presence) =>
@@ -115,6 +172,14 @@ fs.readFile("data/options.json", function (error, content) {
 
   app.listen(port, () => logger.info(`Whatsapp Addon started.`));
 
+  // Connection status per client, e.g. for a RESTful sensor in HA.
+  app.get("/status", (req, res) => {
+    const status = {};
+    for (const [key, client] of Object.entries(clients))
+      status[key] = client.health;
+    res.json(status);
+  });
+
   app.post("/sendMessage", (req, res) => {
     const message = req.body;
     if (message.hasOwnProperty("clientId")) {
@@ -126,9 +191,22 @@ fs.readFile("data/options.json", function (error, content) {
             res.send("OK");
             logger.debug("Message successfully sended from addon.");
           })
-          .catch((error) => {
+          .catch(async (error) => {
             res.send("KO");
             logger.error(error.message);
+            // Hand the message back to HA so an automation can resend it.
+            await fireEvent("whatsapp_send_failed", {
+              clientId: message.clientId,
+              to: message.to,
+              body: message.body,
+              options: message.options,
+              retry: !!message.retry,
+              reason: error?.name || "Error",
+              error: error?.message,
+            });
+            if (isConnectionError(error) && !wapp.health.awaitingQr) {
+              exitForRestart(`${message.clientId} send failed: ${error.message}`);
+            }
           });
       } else {
         logger.error("Error in sending message. Client ID not found.");

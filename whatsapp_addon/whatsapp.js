@@ -35,6 +35,27 @@ class WhatsappClient extends EventEmitter {
     reconnecting: false,
   };
 
+  // Self-heal: track how long we have been down and whether we are waiting
+  // for a QR scan, so index.js can restart the app when a reconnect stalls.
+  #disconnectedSince = Date.now();
+  #awaitingQr = false;
+
+  get health() {
+    return {
+      connected: this.#status.connected,
+      awaitingQr: this.#awaitingQr,
+      loggedOut: this.#status.disconnected,
+      downForMs: this.#status.connected
+        ? 0
+        : Date.now() - this.#disconnectedSince,
+    };
+  }
+
+  #markDown = () => {
+    if (this.#status.connected) this.#disconnectedSince = Date.now();
+    this.#status.connected = false;
+  };
+
   #toMilliseconds = (hrs, min, sec) => (hrs * 60 * 60 + min * 60 + sec) * 1000;
 
   constructor({
@@ -56,10 +77,20 @@ class WhatsappClient extends EventEmitter {
   connect = async () => {
     if (this.#status.connected) return;
 
+    try {
+      await this.#openSocket();
+    } catch (err) {
+      // Previously an error here left the client disconnected for good.
+      this.emit("connect_error", err);
+      this.#reconnect();
+    }
+  };
+
+  #openSocket = async () => {
     const { version } = await fetchLatestBaileysVersion();
     const { state, saveCreds } = await useMultiFileAuthState(this.#path);
 
-    this.#conn = makeWASocket({
+    const sock = makeWASocket({
       version,
       auth: state,
       syncFullHistory: false,
@@ -70,8 +101,11 @@ class WhatsappClient extends EventEmitter {
       defaultQueryTimeoutMs: undefined,
       getMessage: async (key) => this.#msgStore.get(key.id),
     });
+    this.#conn = sock;
 
-    this.#conn.ev.on("creds.update", (state) => {
+    // Ignore late events from a socket that has already been replaced.
+    sock.ev.on("creds.update", (state) => {
+      if (sock !== this.#conn) return;
       if (state.me) {
         this.emit("pair", {
           phone: state.me.id.split(":")[0],
@@ -82,13 +116,16 @@ class WhatsappClient extends EventEmitter {
       saveCreds(state);
     });
 
-    this.#conn.ev.on("connection.update", this.#onConnectionUpdate);
+    sock.ev.on("connection.update", (event) => {
+      if (sock !== this.#conn) return;
+      this.#onConnectionUpdate(event);
+    });
   };
 
   disconnect = (reconnect) => {
     if (this.#status.disconnected) return;
 
-    this.#status.connected = false;
+    this.#markDown();
     this.#status.disconnected = !reconnect;
     this.#status.reconnecting = !!reconnect;
 
@@ -130,11 +167,13 @@ class WhatsappClient extends EventEmitter {
   };
 
   #onQr = (qr) => {
+    this.#awaitingQr = true;
     this.emit("qr", qr);
   };
 
   #onConnected = (event) => {
     this.#status.attempt = 0;
+    this.#awaitingQr = false;
     this.#status.connected = true;
     this.#status.disconnected = false;
     this.#status.reconnecting = false;
@@ -160,7 +199,7 @@ class WhatsappClient extends EventEmitter {
   };
 
   #onDisconnected = ({ lastDisconnect }) => {
-    this.#status.connected = false;
+    this.#markDown();
 
     clearInterval(this.#refreshInterval);
     this.setSendPresenceUpdateInterval();
@@ -224,7 +263,7 @@ class WhatsappClient extends EventEmitter {
         }
         return result;
       } catch (err) {
-        throw new WhatsappError(err.output.payload.statusCode);
+        throw new WhatsappError(err?.output?.payload?.statusCode ?? 0);
       }
     }
 
