@@ -1,11 +1,10 @@
 const EventEmitter = require("eventemitter2");
 
-const makeWASocket = require("./Baileys").default;
-const {
-  DisconnectReason,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-} = require("./Baileys");
+// Baileys (npm package "baileys") is ESM-only from 6.7.2x, so it is loaded
+// with a dynamic import instead of require().
+let baileys;
+const loadBaileys = async () => (baileys ??= await import("baileys"));
+const LOGGED_OUT = 401; // DisconnectReason.loggedOut
 
 const MessageType = {
   text: "conversation",
@@ -90,6 +89,11 @@ class WhatsappClient extends EventEmitter {
   };
 
   #openSocket = async () => {
+    const {
+      default: makeWASocket,
+      useMultiFileAuthState,
+      fetchLatestBaileysVersion,
+    } = await loadBaileys();
     const { version } = await fetchLatestBaileysVersion();
     const { state, saveCreds } = await useMultiFileAuthState(this.#path);
 
@@ -209,7 +213,7 @@ class WhatsappClient extends EventEmitter {
 
     const statusCode = lastDisconnect?.error?.output?.statusCode;
 
-    if (statusCode === DisconnectReason.loggedOut) {
+    if (statusCode === (baileys?.DisconnectReason?.loggedOut ?? LOGGED_OUT)) {
       this.#status.reconnecting = false;
       this.#status.disconnected = true;
 

@@ -1,3 +1,10 @@
+## 1.8.0 (pug306d fork)
+
+- WhatsApp library: replaced the bundled copy of Baileys 6.7.12 with the official `baileys` 6.7.24 package from npm (pinned in package-lock.json), including newer LID handling fixes
+- Uses the official `libsignal` from WhiskeySockets instead of a personal fork
+- Image builds no longer compile Baileys from source, so they are faster and repeatable
+- Requires Node 20+ (the base image ships Node 22)
+
 ## 1.7.0 (pug306d fork)
 
 - Now installable from the App Store: add `https://github.com/pug306d/ha-addons` as a repository
