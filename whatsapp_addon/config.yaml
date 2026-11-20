@@ -1,8 +1,8 @@
-name: Whatsapp
-version: "1.6.0"
+name: Whatsapp (Lodge)
+version: "1.7.0"
 slug: whatsapp_addon
-description: Whatsapp addon for send message from Home Assistant
-url: "https://github.com/giuseppecastaldo/ha-addons/tree/main/whatsapp_addon"
+description: Send and receive WhatsApp messages from Home Assistant (self-healing fork)
+url: "https://github.com/pug306d/ha-addons/tree/main/whatsapp_addon"
 homeassistant_api: true
 arch:
   - armhf

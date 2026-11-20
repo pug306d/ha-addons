@@ -1,3 +1,11 @@
+## 1.7.0 (pug306d fork)
+
+- Now installable from the App Store: add `https://github.com/pug306d/ha-addons` as a repository
+- Renamed to **Whatsapp (Lodge)**, docs and links point at the fork
+- New connection sensor per client: `binary_sensor.whatsapp_<client>_connected`
+- Docs: events, resend automation, security and troubleshooting
+- Dependencies: lock file for the app, `log4js` no longer allowed to jump major versions
+
 ## 1.6.0 (pug306d fork)
 
 - Self-heal: the app restarts itself (via the Supervisor watchdog) when WhatsApp disconnects and does not come back, or when a send fails because of it

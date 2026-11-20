@@ -2,4 +2,7 @@
 configuration:
   clients:
     name: Clients
-    description: Create other clients
+    description: One entry per WhatsApp account (session). Each becomes a clientId.
+  baileys_log_level:
+    name: WhatsApp library log level
+    description: How much the WhatsApp library (Baileys) writes to this log. Use warn or debug only while troubleshooting.

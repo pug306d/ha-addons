@@ -49,7 +49,7 @@ data:
   to: 391234567890@s.whatsapp.net
   body:
     audio:
-      url: "https://github.com/giuseppecastaldo/ha-addons/blob/main/whatsapp_addon/examples/hello_world.mp3?raw=true"
+      url: "https://github.com/pug306d/ha-addons/blob/main/whatsapp_addon/examples/hello_world.mp3?raw=true"
     ptt: true # Send audio as a voice
 ```
 
@@ -193,3 +193,61 @@ data:
         message: Contact is online!
   mode: single
 ```
+
+## Reliability features (Lodge fork)
+
+### Connection sensor
+
+Each client gets `binary_sensor.whatsapp_<client>_connected` (on = connected). Attributes: `app_reachable`, `awaiting_qr`, `logged_out`, `down_for_seconds`. It reads off (not unavailable) when the app itself is down, so a simple state trigger catches every outage.
+
+### Events
+
+| Event | When | Data |
+|---|---|---|
+| `whatsapp_send_failed` | A send failed, or the app was unreachable | `clientId`, `to`, `body`, `options`, `retry`, `reason`, `error` |
+| `whatsapp_client_ready` | A client (re)connected | `clientId` |
+| `whatsapp_client_restarting` | The app is restarting itself to recover | `reason` |
+
+### Resending failed messages
+
+The app restarts itself after a disconnected send. This automation waits for it and resends once (`retry: true` stops a loop), or tells you if WhatsApp stays down:
+
+```yaml
+alias: WhatsApp - Resend failed messages
+triggers:
+  - trigger: event
+    event_type: whatsapp_send_failed
+conditions:
+  - "{{ not trigger.event.data.retry and trigger.event.data.reason != 'WhatsappNumberNotFoundError' }}"
+actions:
+  - wait_for_trigger:
+      - trigger: event
+        event_type: whatsapp_client_ready
+    timeout: "00:05:00"
+  - if: "{{ wait.trigger is none }}"
+    then:
+      - action: persistent_notification.create
+        data:
+          title: WhatsApp down - message not delivered
+          message: "To {{ trigger.event.data.to }}: {{ trigger.event.data.body.text | default('(non-text message)') }}"
+    else:
+      - delay: "00:00:05"
+      - action: whatsapp.send_message
+        continue_on_error: true
+        data:
+          clientId: "{{ trigger.event.data.clientId }}"
+          to: "{{ trigger.event.data.to }}"
+          body: "{{ trigger.event.data.body }}"
+          retry: true
+mode: parallel
+max: 20
+```
+
+### Security
+
+The app's API needs a token that the app creates on first start (`/data/api_token`) and writes into the integration for you. After a fresh install, restart Home Assistant once the app is running so the integration picks it up. `GET /status` is the only call that works without it.
+
+### Troubleshooting
+
+Set **WhatsApp library log level** to `warn` or `debug` in the app's Configuration tab to see what the WhatsApp library is doing.
+

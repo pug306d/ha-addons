@@ -7,7 +7,7 @@
   ],
   "requirements": [],
   "iot_class": "local_polling",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "documentation": "https://github.com/pug306d/ha-addons/tree/main/whatsapp_addon",
   "issue_tracker": "https://github.com/pug306d/ha-addons/issues"
 }

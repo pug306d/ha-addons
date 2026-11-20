@@ -5,8 +5,10 @@ import logging
 
 import voluptuous as vol
 
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.typing import ConfigType
 
 from .whatsapp import Whatsapp, UNREACHABLE
@@ -93,6 +95,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         "send_infinity_presence_update",
         send_infinity_presence_update,
         PRESENCE_UPDATE_SCHEMA,
+    )
+
+    # Connection sensor(s): binary_sensor.whatsapp_<client>_connected
+    hass.async_create_task(
+        async_load_platform(hass, Platform.BINARY_SENSOR, DOMAIN, {}, config)
     )
 
     return True
