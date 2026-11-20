@@ -14,9 +14,21 @@ send_message:
       example: 391234567890@s.whatsapp.net
     body:
       name: Message's body
-      description: Message's body
+      description: "Message's body, e.g. {text: Hello}"
       required: true
       advanced: true
+    options:
+      name: Options
+      description: Extra send options passed to WhatsApp (optional)
+      required: false
+      advanced: true
+    retry:
+      name: Retry
+      description: Marks a resend, so a second failure is not retried again
+      required: false
+      advanced: true
+      selector:
+        boolean:
 
 set_status:
   name: Set status

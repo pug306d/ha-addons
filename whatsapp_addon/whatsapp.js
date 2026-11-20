@@ -27,6 +27,7 @@ class WhatsappClient extends EventEmitter {
   #attempts;
   #offline;
   #refreshMs;
+  #logLevel;
 
   #status = {
     attempt: 0,
@@ -64,6 +65,7 @@ class WhatsappClient extends EventEmitter {
     attempts = Infinity,
     offline = true,
     refreshMs,
+    logLevel = "error",
   }) {
     super();
     this.#path = path;
@@ -71,6 +73,7 @@ class WhatsappClient extends EventEmitter {
     this.#attempts = attempts;
     this.#offline = offline;
     this.#refreshMs = refreshMs || this.#toMilliseconds(6, 0, 0);
+    this.#logLevel = logLevel;
     this.connect();
   }
 
@@ -95,7 +98,7 @@ class WhatsappClient extends EventEmitter {
       auth: state,
       syncFullHistory: false,
       markOnlineOnConnect: !this.#offline,
-      logger: require("pino")({ level: "silent" }),
+      logger: require("pino")({ level: this.#logLevel }),
       generateHighQualityLinkPreview: true,
       browser: ["Ubuntu", "Chrome", "20.0.04"],
       defaultQueryTimeoutMs: undefined,
@@ -222,19 +225,16 @@ class WhatsappClient extends EventEmitter {
     clearInterval(this.#sendPresenceUpdateInterval);
 
     if (status) {
-      try {
-        this.sendPresenceUpdate(status, id);
-      } catch (err) {
-        clearInterval(this.#sendPresenceUpdateInterval);
-      }
+      // sendPresenceUpdate is async: a try/catch round it never caught its
+      // errors, so one failed keep-alive was an unhandled rejection that
+      // could take the whole app down. Catch on the promise instead.
+      const send = () =>
+        this.sendPresenceUpdate(status, id).catch(() =>
+          clearInterval(this.#sendPresenceUpdateInterval)
+        );
 
-      this.#sendPresenceUpdateInterval = setInterval(() => {
-        try {
-          this.sendPresenceUpdate(status, id);
-        } catch (err) {
-          clearInterval(this.#sendPresenceUpdateInterval);
-        }
-      }, 10000);
+      send();
+      this.#sendPresenceUpdateInterval = setInterval(send, 10000);
     }
   };
 
@@ -342,9 +342,8 @@ class WhatsappDisconnectedError extends Error {
 class WhatsappError extends Error {
   #errors = {
     428: "Connection Closed",
-    408: "Connection Lost",
+    408: "Connection Lost / Timed Out",
     440: "Connection Replaced",
-    408: "Timed Out",
     401: "Logged Out",
     500: "Bad Session",
     515: "Restart Required",

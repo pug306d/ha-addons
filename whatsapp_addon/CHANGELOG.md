@@ -1,3 +1,17 @@
+## 1.6.0 (pug306d fork)
+
+- Self-heal: the app restarts itself (via the Supervisor watchdog) when WhatsApp disconnects and does not come back, or when a send fails because of it
+- New events: `whatsapp_send_failed` (carries the message, so HA can resend it), `whatsapp_client_ready`, `whatsapp_client_restarting`
+- New `GET /status` endpoint with per-client connection health
+- Security: the API now needs a per-install token (created automatically and passed to the integration); CORS and unused Supervisor API access removed
+- Fixed: being logged out by WhatsApp crashed the app instead of showing a new QR code
+- Fixed: `send_infinity_presence_update` failed every time
+- Fixed: a failed presence keep-alive could crash the app
+- Fixed: connect errors and late events from an old connection could leave the client dead
+- New option `baileys_log_level` (default `error`) - WhatsApp library logs were silenced completely
+- Integration: service schemas, failures logged in HA, `whatsapp_send_failed` fired when the app is unreachable, `url-normalize` dependency removed
+- Fixed stuck "Waiting for this message" (message cache for retry requests)
+
 ## 1.5.0
 
 - Updated whatsapp library
