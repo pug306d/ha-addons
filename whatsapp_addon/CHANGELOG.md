@@ -1,3 +1,9 @@
+## 2.0.0 (pug306d fork)
+
+- WhatsApp library: Baileys 7 (`7.0.0-rc14`) with full LID (new WhatsApp contact ID) support and session migration
+- May ask for a QR re-scan the first time it starts on an existing session
+- Incoming `new_whatsapp_message` events may now show senders as `...@lid` instead of a phone number
+
 ## 1.8.0 (pug306d fork)
 
 - WhatsApp library: replaced the bundled copy of Baileys 6.7.12 with the official `baileys` 6.7.24 package from npm (pinned in package-lock.json), including newer LID handling fixes

@@ -1,5 +1,5 @@
 name: Whatsapp (Lodge)
-version: "1.8.0"
+version: "2.0.0"
 slug: whatsapp_addon
 description: Send and receive WhatsApp messages from Home Assistant (self-healing fork)
 url: "https://github.com/pug306d/ha-addons/tree/main/whatsapp_addon"
